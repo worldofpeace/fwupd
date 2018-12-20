@@ -2,7 +2,7 @@
 %global libxmlb_version 0.1.3
 %global libgusb_version 0.2.11
 %global libsoup_version 2.51.92
-%global systemd_version 231
+%global systemd_version 211
 %global json_glib_version 1.1.1
 
 %define alphatag                #ALPHATAG#
@@ -84,6 +84,10 @@ BuildRequires: efivar-devel >= 33
 BuildRequires: libsmbios-devel >= 2.3.0
 %endif
 
+%if 0%{?rhel} && 0%{?rhel} < 8
+BuildRequires: python34
+%endif
+
 Requires(post): systemd
 Requires(preun): systemd
 Requires(postun): systemd
@@ -95,8 +99,10 @@ Requires: libsoup%{?_isa} >= %{libsoup_version}
 Requires: bubblewrap
 Requires: shared-mime-info
 
+%if 0%{?rhel} >= 8 || 0%{?fedora}
 Recommends: python3
 Recommends: tpm2-tools tpm2-abrmd
+%endif
 
 Obsoletes: fwupd-sign < 0.1.6
 Obsoletes: libebitdo < 0.7.5-3
@@ -132,6 +138,11 @@ Data files for installed tests.
     --werror \
 %endif
     -Dgtkdoc=true \
+%if 0%{?rhel} >= 8 || 0%{?fedora}
+    -Dpkcs7=true \
+%else
+    -Dpkcs7=false \
+%endif
 %if 0%{?enable_tests}
     -Dtests=true \
 %else
