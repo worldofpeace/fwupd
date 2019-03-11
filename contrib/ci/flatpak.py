@@ -6,7 +6,7 @@ import shutil
 
 def prepare (target):
     #clone the flatpak json
-    cmd = ['git', 'submodule', 'update', '--remote', 'contrib/flatpak']
+    cmd = ['git', 'submodule', 'update', '--init', '--remote', 'contrib/flatpak']
     subprocess.run (cmd, check=True)
 
     #clone the submodules for that

@@ -1,5 +1,17 @@
 version: 2
 jobs:
+  build-flatpak:
+    machine:
+      image: circleci/classic:latest
+    steps:
+      - checkout
+      - run:
+          name: "Build container"
+          command: OS=flatpak ./contrib/ci/generate_docker.py
+      - run:
+          name: "Run build script"
+          command: docker run --privileged -e CI=true -t -v `pwd`/dist:/build/dist fwupd-flatpak
+
   build-s390x:
     machine:
       image: circleci/classic:latest
@@ -59,6 +71,7 @@ workflows:
   main:
     jobs:
       - build-s390x
+      - build-flatpak
       - build-snap
       - publish-edge:
           requires:
