@@ -5,7 +5,9 @@ ENV LANGUAGE en_US:en
 ENV LC_ALL en_US.UTF-8
 RUN echo fubar > /etc/machine-id
 %%%INSTALL_DEPENDENCIES_COMMAND%%%
-RUN dnf --enablerepo=updates-testing -y update
+RUN flatpak remote-add --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+RUN flatpak install flathub org.gnome.Sdk//3.30 -y
+RUN flatpak install flathub org.gnome.Platform//3.30 -y
 RUN mkdir /build
 WORKDIR /build
 COPY . .

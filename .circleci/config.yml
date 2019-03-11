@@ -7,10 +7,10 @@ jobs:
       - checkout
       - run:
           name: "Build container"
-          command: OS=flatpak ./contrib/ci/generate_docker.py
+          command: docker pull superm1/fwupd-flatpak:3.30
       - run:
           name: "Run build script"
-          command: docker run --privileged -e CI=true -t -v `pwd`/dist:/build/dist fwupd-flatpak
+          command: docker run --privileged -e CI=true -t -v `pwd`/dist:/build/dist superm1/fwupd-flatpak:3.30
 
   build-s390x:
     machine:
