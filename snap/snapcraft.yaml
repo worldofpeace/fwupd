@@ -236,6 +236,36 @@ parts:
     - -usr/include
     - -usr/lib/gettext
     - -usr/share
+  gnutls:
+    plugin: autotools
+    source: ftp://ftp.gnutls.org/gcrypt/gnutls/v3.6/gnutls-3.6.6.tar.xz
+    build-packages:
+      - nettle-dev
+      - zlib1g-dev
+      - libtasn1-6-dev
+      - autotools-dev
+      - ca-certificates
+      - datefudge
+      - libp11-kit-dev
+      - pkg-config
+      - chrpath
+      - libidn2-0-dev,
+      - autogen
+      - bison
+      - libcmocka-dev
+      - libgmp-dev
+      - libopts25-dev
+      - automake
+      - libunbound-dev,
+      - libunistring-dev
+    prime:
+      - -include
+      - -etc
+      - -sbin
+      - -bin
+      - -share
+      - -lib/*.*a
+      - -lib/pkgconfig
   fwupd:
     plugin: meson
     meson-parameters: [--prefix=/,
@@ -250,8 +280,7 @@ parts:
                        -Dplugin_modem_manager=true,
                        -Dudevdir=$SNAPCRAFT_STAGE/lib/udev,
                        "-Dlibxmlb:gtkdoc=false",
-                       "-Dlibxmlb:introspection=false",
-                       -Dpkcs7=false]
+                       "-Dlibxmlb:introspection=false"]
     source: .
     source-type: git
     override-build: |
@@ -260,7 +289,6 @@ parts:
     build-packages:
       - bash-completion
       - gcab
-      - gnutls-dev
       - libarchive-dev
       - libcairo-dev
       - libelf-dev
@@ -322,7 +350,7 @@ parts:
       - -usr/share/gir-1.0
       - -usr/share/upstart
       - -usr/lib/*/pkgconfig
-    after: [gudev, gusb, gnu-efi, libefivar-fixpkgconfig, libsmbios, build-introspection, gettext, modemmanager, libmbim, libqmi]
+    after: [gudev, gusb, gnu-efi, libefivar-fixpkgconfig, libsmbios, build-introspection, gettext, modemmanager, libmbim, libqmi, gnutls]
   fix-bash-completion:
     plugin: make
     source: contrib/snap/fix-bash-completion
