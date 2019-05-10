@@ -591,10 +591,10 @@ fwup_apply_capsules(EFI_CAPSULE_HEADER **capsules,
 				num_updates, &max_capsule_size, reset);
 	if (EFI_ERROR(rc)) {
 		fwup_warning(L"Could not query capsule capabilities: %r", rc);
-		return rc;
+	} else {
+		fwup_debug(L"QueryCapsuleCapabilities: %r max: %ld reset:%d",
+			   rc, max_capsule_size, *reset);
 	}
-	fwup_debug(L"QueryCapsuleCapabilities: %r max: %ld reset:%d",
-	           rc, max_capsule_size, *reset);
 	fwup_debug(L"Capsules: %d", num_updates);
 
 	fwup_msleep(1 * SECONDS);
