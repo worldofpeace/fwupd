@@ -41,6 +41,7 @@
 #include "fu-plugin-private.h"
 #include "fu-quirks.h"
 #include "fu-smbios.h"
+#include "fu-systemd.h"
 #include "fu-udev-device-private.h"
 #include "fu-usb-device-private.h"
 
@@ -1487,14 +1488,17 @@ static gboolean
 fu_engine_is_running_offline (FuEngine *self)
 {
 #ifdef HAVE_SYSTEMD
-	g_autofree gchar *default_target = NULL;
+	const gchar *unit = "fwupd-offline-update.service";
+	g_autofree gchar *shutdown_state = NULL;
 	g_autoptr(GError) error = NULL;
-	default_target = fu_systemd_get_default_target (&error);
-	if (default_target == NULL) {
-		g_warning ("failed to get default.target: %s", error->message);
+	const gchar *active_states[] = { "active", "activating", "deactivating", NULL };
+	shutdown_state = fu_systemd_unit_get_state (unit, &error);
+	if (shutdown_state == NULL) {
+		g_warning ("failed detect offline: %s", error->message);
 		return FALSE;
 	}
-	return g_strcmp0 (default_target, "system-update.target") == 0;
+	g_debug ("%s has state '%s'", unit, shutdown_state);
+	return g_strv_contains (active_states, shutdown_state);
 #else
 	return FALSE;
 #endif

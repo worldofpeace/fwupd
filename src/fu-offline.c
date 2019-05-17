@@ -139,8 +139,6 @@ main (int argc, char *argv[])
 {
 	gint vercmp;
 	guint cnt = 0;
-	g_autofree gchar *link = NULL;
-	g_autofree gchar *target = fu_common_get_path (FU_PATH_KIND_LOCALSTATEDIR_PKG);
 	g_autoptr(FuHistory) history = NULL;
 	g_autoptr(FwupdClient) client = NULL;
 	g_autoptr(GError) error = NULL;
@@ -152,16 +150,6 @@ main (int argc, char *argv[])
 	bindtextdomain (GETTEXT_PACKAGE, LOCALEDIR);
 	bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
 	textdomain (GETTEXT_PACKAGE);
-
-	/* verify this is pointing to our cache */
-	link = g_file_read_link (FU_OFFLINE_TRIGGER_FILENAME, NULL);
-	if (link == NULL)
-		return EXIT_SUCCESS;
-	if (g_strcmp0 (link, target) != 0)
-		return EXIT_SUCCESS;
-
-	/* do this first to avoid a loop if this tool segfaults */
-	g_unlink (FU_OFFLINE_TRIGGER_FILENAME);
 
 	/* ensure root user */
 	if (getuid () != 0 || geteuid () != 0) {
@@ -203,7 +191,7 @@ main (int argc, char *argv[])
 		/* TRANSLATORS: we could not talk to plymouth */
 		g_printerr ("%s: %s\n", _("Failed to set splash mode"),
 			    error->message);
-		return EXIT_FAILURE;
+		g_clear_error (&error);
 	}
 
 	/* apply each update */
@@ -265,15 +253,8 @@ main (int argc, char *argv[])
 		return EXIT_FAILURE;
 	}
 
-	/* reboot */
-	fu_offline_set_splash_reboot (priv, NULL);
-	if (!fu_util_update_reboot (&error)) {
-		/* TRANSLATORS: we could not reboot for some reason */
-		g_printerr ("%s: %s\n", _("Failed to reboot"), error->message);
-		return EXIT_FAILURE;
-	}
-
 	/* success */
+	fu_offline_set_splash_reboot (priv, NULL);
 	g_print ("%s\n", _("Done!"));
 	return EXIT_SUCCESS;
 }

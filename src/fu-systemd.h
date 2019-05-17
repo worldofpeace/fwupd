@@ -18,6 +18,8 @@ gboolean	 fu_systemd_unit_enable		(const gchar	*unit,
 						 GError		**error);
 gboolean	 fu_systemd_unit_disable	(const gchar	*unit,
 						 GError		**error);
+gchar		*fu_systemd_unit_get_state	(const gchar	*unit,
+						 GError		**error);
 gchar		*fu_systemd_get_default_target	(GError		**error);
 
 G_END_DECLS

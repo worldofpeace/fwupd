@@ -25,6 +25,7 @@
 #include "fu-history.h"
 #include "fu-plugin-private.h"
 #include "fu-progressbar.h"
+#include "fu-systemd.h"
 #include "fu-util-common.h"
 #include "fwupd-common-private.h"
 

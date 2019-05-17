@@ -16,6 +16,7 @@
 #define SYSTEMD_OBJECT_PATH		"/org/freedesktop/systemd1"
 #define SYSTEMD_INTERFACE		"org.freedesktop.systemd1"
 #define SYSTEMD_MANAGER_INTERFACE	"org.freedesktop.systemd1.Manager"
+#define SYSTEMD_UNIT_INTERFACE		"org.freedesktop.systemd1.Unit"
 
 static GDBusProxy *
 fu_systemd_get_manager (GError **error)
@@ -124,6 +125,42 @@ fu_systemd_unit_stop (const gchar *unit, GError **error)
 				      G_DBUS_CALL_FLAGS_NONE,
 				      -1, NULL, error);
 	return val != NULL;
+}
+
+gchar *
+fu_systemd_unit_get_state (const gchar *unit, GError **error)
+{
+	g_autofree gchar *path = NULL;
+	g_autoptr(GDBusProxy) proxy_manager = NULL;
+	g_autoptr(GVariant) val = NULL;
+	g_autoptr(GVariant) val_vstr = NULL;
+
+	g_return_val_if_fail (unit != NULL, FALSE);
+
+	proxy_manager = fu_systemd_get_manager (error);
+	if (proxy_manager == NULL)
+		return NULL;
+	path = fu_systemd_unit_get_path (proxy_manager, unit, error);
+	if (path == NULL)
+		return NULL;
+	val = g_dbus_connection_call_sync (g_dbus_proxy_get_connection (proxy_manager),
+					   SYSTEMD_SERVICE,
+					   path,
+					   "org.freedesktop.DBus.Properties",
+					   "Get",
+					   g_variant_new ("(ss)",
+							  SYSTEMD_UNIT_INTERFACE,
+							  "ActiveState"),
+					   NULL,
+					   G_DBUS_CALL_FLAGS_NONE,
+					   1500, NULL, error);
+	if (val == NULL) {
+		g_prefix_error (error, "failed to get ActiveState: ");
+		return NULL;
+	}
+	g_variant_get (val, "(v)", &val_vstr);
+	return g_variant_dup_string (val_vstr, NULL);
+
 }
 
 gboolean

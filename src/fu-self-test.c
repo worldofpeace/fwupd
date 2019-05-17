@@ -3677,6 +3677,7 @@ main (int argc, char **argv)
 	g_setenv ("FWUPD_SYSCONFDIR", TESTDATADIR_SRC, TRUE);
 	g_setenv ("FWUPD_SYSFSFWDIR", TESTDATADIR_SRC, TRUE);
 	g_setenv ("FWUPD_LOCALSTATEDIR", "/tmp/fwupd-self-test/var", TRUE);
+	g_setenv ("FWUPD_IGNORE_SYSTEMD", "1", FALSE);
 
 	/* ensure empty tree */
 	fu_self_test_mkroot ();

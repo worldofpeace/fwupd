@@ -22,6 +22,7 @@
 #include "fu-plugin-private.h"
 #include "fu-history.h"
 #include "fu-mutex.h"
+#include "fu-systemd.h"
 
 /**
  * SECTION:fu-plugin
@@ -838,60 +839,6 @@ fu_plugin_runner_startup (FuPlugin *self, GError **error)
 }
 
 static gboolean
-fu_plugin_runner_offline_invalidate (GError **error)
-{
-	g_autoptr(GError) error_local = NULL;
-	g_autoptr(GFile) file1 = NULL;
-
-	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
-
-	file1 = g_file_new_for_path (FU_OFFLINE_TRIGGER_FILENAME);
-	if (!g_file_query_exists (file1, NULL))
-		return TRUE;
-	if (!g_file_delete (file1, NULL, &error_local)) {
-		g_set_error (error,
-			     FWUPD_ERROR,
-			     FWUPD_ERROR_INTERNAL,
-			     "Cannot delete %s: %s",
-			     FU_OFFLINE_TRIGGER_FILENAME,
-			     error_local->message);
-		return FALSE;
-	}
-	return TRUE;
-}
-
-static gboolean
-fu_plugin_runner_offline_setup (GError **error)
-{
-	gint rc;
-	g_autofree gchar *filename = NULL;
-	g_autofree gchar *symlink_target = fu_common_get_path (FU_PATH_KIND_LOCALSTATEDIR_PKG);
-
-	g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
-
-	/* does already exist */
-	filename = fu_common_realpath (FU_OFFLINE_TRIGGER_FILENAME, NULL);
-	if (g_strcmp0 (filename, symlink_target) == 0) {
-		g_debug ("%s already points to %s, skipping creation",
-			 FU_OFFLINE_TRIGGER_FILENAME, symlink_target);
-		return TRUE;
-	}
-
-	/* create symlink for the systemd-system-update-generator */
-	rc = symlink (symlink_target, FU_OFFLINE_TRIGGER_FILENAME);
-	if (rc < 0) {
-		g_set_error (error,
-			     FWUPD_ERROR,
-			     FWUPD_ERROR_INTERNAL,
-			     "Failed to create symlink %s to %s: %s",
-			     FU_OFFLINE_TRIGGER_FILENAME,
-			     "/var/lib", strerror (errno));
-		return FALSE;
-	}
-	return TRUE;
-}
-
-static gboolean
 fu_plugin_runner_device_generic (FuPlugin *self, FuDevice *device,
 				 const gchar *symbol_name, GError **error)
 {
@@ -1402,9 +1349,16 @@ fu_plugin_runner_schedule_update (FuPlugin *self,
 	if (!fu_history_add_device (history, device, release, error))
 		return FALSE;
 
-	/* next boot we run offline */
+	/* on shutdown we run offline */
 	fu_device_set_progress (device, 100);
-	return fu_plugin_runner_offline_setup (error);
+	if (g_getenv ("FWUPD_IGNORE_SYSTEMD") == NULL) {
+		g_debug ("enabling the offline update service");
+		if (!fu_systemd_unit_enable ("fwupd-offline-update.service", error))
+			return FALSE;
+	}
+
+	/* success */
+	return TRUE;
 }
 
 gboolean
@@ -1567,8 +1521,11 @@ fu_plugin_runner_update (FuPlugin *self,
 	}
 
 	/* cancel the pending action */
-	if (!fu_plugin_runner_offline_invalidate (error))
-		return FALSE;
+	if (g_getenv ("FWUPD_IGNORE_SYSTEMD") == NULL) {
+		g_debug ("disabling the offline update service");
+		if (!fu_systemd_unit_disable ("fwupd-offline-update.service", error))
+			return FALSE;
+	}
 
 	/* online */
 	history = fu_history_new ();
