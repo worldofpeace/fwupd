@@ -22,6 +22,8 @@
 #include "config.h"
 
 #include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #include "fu-plugin-vfuncs.h"
 #include "libflashrom.h"
