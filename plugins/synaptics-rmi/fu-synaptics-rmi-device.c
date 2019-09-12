@@ -103,6 +103,13 @@ fu_synaptics_rmi_device_get_function (FuSynapticsRmiDevice *self,
 				      GError **error)
 {
 	FuSynapticsRmiDevicePrivate *priv = GET_PRIVATE (self);
+	if (priv->functions->len == 0) {
+		g_set_error_literal (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "no RMI functions, perhaps read the PDT?");
+		return NULL;
+	}
 	for (guint i = 0; i < priv->functions->len; i++) {
 		FuSynapticsRmiFunction *func = g_ptr_array_index (priv->functions, i);
 		if (func->function_number == function_number)
@@ -401,6 +408,10 @@ fu_synaptics_rmi_device_setup (FuDevice *device, GError **error)
 
 	/* read basic device information */
 	if (!fu_synaptics_rmi_device_set_rma_page (self, 0x00, error))
+		return FALSE;
+
+	/* read PDT */
+	if (!fu_synaptics_rmi_device_scan_pdt (self, error))
 		return FALSE;
 	priv->f01 = fu_synaptics_rmi_device_get_function (self, 0x01, error);
 	if (priv->f01 == NULL)
