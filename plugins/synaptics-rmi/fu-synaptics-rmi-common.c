@@ -48,10 +48,11 @@ fu_synaptics_rmi_function_parse (GByteArray *buf, guint16 page_base, guint inter
 
 	/* not expected */
 	if (buf->len != RMI_DEVICE_PDT_ENTRY_SIZE) {
-		g_set_error_literal (error,
-				     FWUPD_ERROR,
-				     FWUPD_ERROR_INTERNAL,
-				     "PDT entry buffer invalid");
+		g_set_error (error,
+			     FWUPD_ERROR,
+			     FWUPD_ERROR_INTERNAL,
+			     "PDT entry buffer invalid size %u != %i",
+			     buf->len, RMI_DEVICE_PDT_ENTRY_SIZE);
 		return NULL;
 	}
 

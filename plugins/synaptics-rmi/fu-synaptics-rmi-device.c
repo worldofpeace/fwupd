@@ -90,7 +90,7 @@ fu_synaptics_rmi_device_to_string (FuDevice *device, guint idt, GString *str)
 	fu_common_string_append_kb (str, idt, "HasSensorID", priv->has_sensor_id);
 	fu_common_string_append_kb (str, idt, "HasQuery42", priv->has_query42);
 	fu_common_string_append_kb (str, idt, "HasDS4Queries", priv->has_dds4_queries);
-	fu_common_string_append_kx (str, idt, "CackageID", priv->config_id);
+	fu_common_string_append_kx (str, idt, "ConfigID", priv->config_id);
 	fu_common_string_append_kx (str, idt, "PackageID", priv->package_id);
 	fu_common_string_append_kx (str, idt, "PackageRev", priv->package_rev);
 	fu_common_string_append_kx (str, idt, "BuildID", priv->build_id);
@@ -157,8 +157,16 @@ fu_synaptics_rmi_device_read (FuSynapticsRmiDevice *self, guint16 addr, gsize re
 		fu_byte_array_append_uint16 (req, req_sz, G_LITTLE_ENDIAN);
 
 		/* request */
+		for (guint j = req->len; j < 21; j++)
+			fu_byte_array_append_uint8 (req, 0x0);
+		if (g_getenv ("FWUPD_SYNAPTICS_RMI_VERBOSE") != NULL) {
+			fu_common_dump_full (G_LOG_DOMAIN, "ReportWrite",
+					     req->data, req->len,
+					     80, FU_DUMP_FLAGS_NONE);
+		}
 		if (!fu_io_channel_write_byte_array (priv->io_channel, req, 5000,
-						     FU_IO_CHANNEL_FLAG_NONE, error))
+						     FU_IO_CHANNEL_FLAG_SINGLE_SHOT |
+						     FU_IO_CHANNEL_FLAG_USE_BLOCKING_IO, error))
 			return NULL;
 
 		/* response */
@@ -166,18 +174,17 @@ fu_synaptics_rmi_device_read (FuSynapticsRmiDevice *self, guint16 addr, gsize re
 						     FU_IO_CHANNEL_FLAG_NONE, error);
 		if (res == NULL)
 			return NULL;
-		if (res->len < HID_RMI4_READ_INPUT_DATA) {
-			g_set_error_literal (error,
-					     FWUPD_ERROR,
-					     FWUPD_ERROR_INTERNAL,
-					     "response too small");
-			return NULL;
+		if (g_getenv ("FWUPD_SYNAPTICS_RMI_VERBOSE") != NULL) {
+			fu_common_dump_full (G_LOG_DOMAIN, "ReportRead",
+					     res->data, res->len,
+					     80, FU_DUMP_FLAGS_NONE);
 		}
-		if (res->len > req_sz + HID_RMI4_READ_INPUT_DATA) {
-			g_set_error_literal (error,
-					     FWUPD_ERROR,
-					     FWUPD_ERROR_INTERNAL,
-					     "response larger than expected");
+		if (res->len < HID_RMI4_READ_INPUT_DATA) {
+			g_set_error (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "response too small: 0x%02x",
+				     res->len);
 			return NULL;
 		}
 		input_count_sz = res->data[HID_RMI4_READ_INPUT_COUNT];
@@ -188,16 +195,29 @@ fu_synaptics_rmi_device_read (FuSynapticsRmiDevice *self, guint16 addr, gsize re
 					     "input count zero");
 			return NULL;
 		}
-		if (input_count_sz > req_sz) {
-			g_set_error_literal (error,
-					     FWUPD_ERROR,
-					     FWUPD_ERROR_INTERNAL,
-					     "input count larger than expected");
+		if (input_count_sz < (guint) req_sz) {
+			g_set_error (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "input count smaller 0x%02x than request 0x%02x",
+				     input_count_sz, (guint) req_sz);
+			return NULL;
+		}
+		if (input_count_sz + (guint) HID_RMI4_READ_INPUT_DATA > res->len) {
+			g_set_error (error,
+				     FWUPD_ERROR,
+				     FWUPD_ERROR_INTERNAL,
+				     "underflow 0x%02x from expected 0x%02x",
+				     res->len, (guint) input_count_sz + HID_RMI4_READ_INPUT_DATA);
 			return NULL;
 		}
 		g_byte_array_append (buf,
 				     res->data + HID_RMI4_READ_INPUT_DATA,
-				     res->len - HID_RMI4_READ_INPUT_DATA);
+				     input_count_sz);
+	}
+	if (g_getenv ("FWUPD_SYNAPTICS_RMI_VERBOSE") != NULL) {
+		fu_common_dump_full (G_LOG_DOMAIN, "DeviceRead", buf->data, buf->len,
+				     80, FU_DUMP_FLAGS_NONE);
 	}
 
 	return g_steal_pointer (&buf);
@@ -235,8 +255,19 @@ fu_synaptics_rmi_device_write (FuSynapticsRmiDevice *self, guint16 addr, GByteAr
 
 	/* optional data */
 	g_byte_array_append (buf, req->data, req->len);
+
+	/* pad out to 21 bytes for some reason */
+	for (guint i = buf->len; i < 21; i++)
+		fu_byte_array_append_uint8 (buf, 0x0);
+	if (g_getenv ("FWUPD_SYNAPTICS_RMI_VERBOSE") != NULL) {
+		fu_common_dump_full (G_LOG_DOMAIN, "DeviceWrite", buf->data, buf->len,
+				     80, FU_DUMP_FLAGS_NONE);
+	}
+
 	return fu_io_channel_write_byte_array (priv->io_channel, buf, 5000,
-					       FU_IO_CHANNEL_FLAG_NONE, error);
+					       FU_IO_CHANNEL_FLAG_SINGLE_SHOT |
+					       FU_IO_CHANNEL_FLAG_USE_BLOCKING_IO,
+					       error);
 }
 
 static gboolean
@@ -307,6 +338,13 @@ fu_synaptics_rmi_device_scan_pdt (FuSynapticsRmiDevice *self, GError **error)
 				return FALSE;
 			if (func->function_number == 0)
 				break;
+			g_debug ("0x%02x (%d) (%d) (0x%x): 0x%02x 0x%02x 0x%02x 0x%02x",
+				 func->function_number, func->function_version,
+				 func->interrupt_source_count,
+				 func->interrupt_mask,
+				 func->data_base,
+				 func->control_base, func->command_base,
+				 func->query_base);
 			interrupt_count += func->interrupt_source_count;
 			g_ptr_array_add (priv->functions, g_steal_pointer (&func));
 		}
@@ -350,25 +388,24 @@ fu_synaptics_rmi_device_set_feature (FuSynapticsRmiDevice *self,
 	return TRUE;
 }
 
-#if 0
 static gboolean
-fu_synaptics_rmi_device_set_mode (FuSynapticsRmiDevice *self, guint8 mode, GError **error)
+fu_synaptics_rmi_device_set_mode (FuSynapticsRmiDevice *self,
+				  FuSynapticsRmiHidMode mode,
+				  GError **error)
 {
 	FuSynapticsRmiDevicePrivate *priv = GET_PRIVATE (self);
 	const guint8 data[] = { 0x0f, mode };
 
-	/* Set Feature */
-	fu_common_dump_raw (G_LOG_DOMAIN, "SetFeature", data, sizeof(data));
+	fu_common_dump_raw (G_LOG_DOMAIN, "SetMode", data, sizeof(data));
 	if (ioctl (priv->fd, HIDIOCSFEATURE(sizeof(data)), data) < 0) {
 		g_set_error_literal (error,
 				     FWUPD_ERROR,
 				     FWUPD_ERROR_INTERNAL,
-				     "failed to SetFeature");
+				     "failed to SetMode");
 		return FALSE;
 	}
 	return TRUE;
 }
-#endif
 
 gboolean
 fu_synaptics_rmi_device_get_feature (FuSynapticsRmiDevice *self,
@@ -427,7 +464,7 @@ fu_synaptics_rmi_device_setup (FuDevice *device, GError **error)
 	priv->has_sensor_id = f01_basic->data[1] & RMI_DEVICE_F01_QRY1_HAS_SENSOR_ID;
 	priv->has_query42 = f01_basic->data[1] & RMI_DEVICE_F01_QRY1_HAS_PROPS_2;
 	fw_ver = g_strdup_printf ("%u.%u", f01_basic->data[2], f01_basic->data[3]);
-	fu_device_set_version (device, bl_ver, FWUPD_VERSION_FORMAT_PAIR);
+	fu_device_set_version (device, fw_ver, FWUPD_VERSION_FORMAT_PAIR);
 
 	/* use the product ID as the name */
 	addr += 11;
@@ -529,7 +566,7 @@ fu_synaptics_rmi_device_setup (FuDevice *device, GError **error)
 	//FIXME: get Function34_Query0,1
 	priv->bootloader_id[0] = 0xde;
 	priv->bootloader_id[1] = 0xad;
-	bl_ver = g_strdup_printf ("%u", priv->bootloader_id[1]);
+	bl_ver = g_strdup_printf ("%u.0", priv->bootloader_id[1]);
 	fu_device_set_version_bootloader (device, bl_ver);
 
 	//FIXME: get Function34:UImode
@@ -537,7 +574,7 @@ fu_synaptics_rmi_device_setup (FuDevice *device, GError **error)
 		fu_device_remove_flag (device, FWUPD_DEVICE_FLAG_IS_BOOTLOADER);
 
 		//FIXME: get from hardware
-		fu_device_set_version (device, "1.2.3", FWUPD_VERSION_FORMAT_TRIPLET);
+		//fu_device_set_version (device, "1.2", FWUPD_VERSION_FORMAT_TRIPLET);
 	}
 
 	/* get Function34:FlashProgrammingEn */
@@ -580,6 +617,10 @@ fu_synaptics_rmi_device_open (FuDevice *device, GError **error)
 	}
 	priv->io_channel = fu_io_channel_unix_new (priv->fd);
 
+	/* set up touchpad so we can query it */
+	if (!fu_synaptics_rmi_device_set_mode (self, HID_RMI4_MODE_ATTN_REPORTS, error))
+		return FALSE;
+
 	/* success */
 	return TRUE;
 }
@@ -589,9 +630,12 @@ fu_synaptics_rmi_device_close (FuDevice *device, GError **error)
 {
 	FuSynapticsRmiDevice *self = FU_SYNAPTICS_RMI_DEVICE (device);
 	FuSynapticsRmiDevicePrivate *priv = GET_PRIVATE (self);
-	g_clear_object (&priv->io_channel);
-	if (!g_close (priv->fd, error))
+
+	/* turn it back to mouse mode */
+	if (!fu_synaptics_rmi_device_set_mode (self, HID_RMI4_MODE_MOUSE, error))
 		return FALSE;
+
+	g_clear_object (&priv->io_channel);
 	priv->fd = 0;
 	return TRUE;
 }
@@ -776,6 +820,7 @@ fu_synaptics_rmi_device_init (FuSynapticsRmiDevice *self)
 	FuSynapticsRmiDevicePrivate *priv = GET_PRIVATE (self);
 	fu_device_add_flag (FU_DEVICE (self), FWUPD_DEVICE_FLAG_UPDATABLE);
 	priv->functions = g_ptr_array_new_with_free_func (g_free);
+	priv->page = 0xff;
 }
 
 static void
